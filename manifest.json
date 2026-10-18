@@ -1,0 +1,72 @@
+{
+  "manifest_version": 3,
+  "name": "مدیر اشتراک‌های یوتیوب",
+  "version": "1.9.8",
+  "description": "نمایش کامل کانال‌های دنبال‌شده در یوتیوب و دسته‌بندی محلی آن‌ها.",
+  "icons": {
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "permissions": [
+    "storage",
+    "notifications",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://www.youtube.com/*",
+    "https://yt3.ggpht.com/*",
+    "https://yt3.googleusercontent.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "fonts/Vazirmatn.woff2"
+      ],
+      "matches": [
+        "*://www.youtube.com/*"
+      ]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' data: blob: https:;"
+  },
+  "action": {
+    "default_title": "مدیر اشتراک‌های یوتیوب",
+    "default_popup": "popup/popup.html",
+    "default_icon": "icons/icon.svg"
+  },
+  "sidebar_action": {
+    "default_title": "اشتراک‌های یوتیوب",
+    "default_panel": "sidebar/index.html",
+    "default_icon": "icons/icon.svg",
+    "open_at_install": false
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://www.youtube.com/*"
+      ],
+      "js": [
+        "shared/channel-data.js",
+        "content/youtube-scanner.js",
+        "content/youtube-enhancements.js",
+        "content/youtube-video-scanner.js"
+      ],
+      "css": [
+        "content/youtube.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "youtube-subscription-organizer@local",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      },
+      "strict_min_version": "142.0"
+    }
+  }
+}

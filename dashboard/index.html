@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>مدیر اشتراک‌های یوتیوب</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#top" aria-label="مدیر اشتراک‌های یوتیوب">
+          <img src="../icons/icon.svg" width="44" height="44" alt="">
+          <span><strong>اشتراک‌های من</strong><small>مرتب، کامل، در دسترس</small></span>
+        </a>
+
+        <nav id="category-list" class="category-list" aria-label="دسته‌ها"></nav>
+
+        <form id="category-form" class="category-form">
+          <label for="category-name">دستهٔ جدید</label>
+          <div>
+            <input id="category-name" maxlength="32" placeholder="مثلاً موسیقی" required>
+            <input id="category-color" type="color" value="#d9233f" aria-label="رنگ دسته">
+          </div>
+          <button type="submit">افزودن دسته</button>
+        </form>
+
+        <div class="sidebar-footer">
+          <button id="export-data" class="text-button" type="button">خروجی پشتیبان</button>
+          <label class="text-button file-button">بازیابی پشتیبان<input id="import-data" type="file" accept="application/json,.json"></label>
+        </div>
+      </aside>
+
+      <main id="top" class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">کتابخانهٔ شخصی شما</p>
+            <h1>همهٔ کانال‌ها، بدون محدودیت فهرست</h1>
+            <p id="sync-meta" class="sync-meta">هنوز اطلاعاتی از یوتیوب دریافت نشده است.</p>
+          </div>
+          <div class="top-actions">
+            <button id="video-sync-button" class="secondary-button" type="button">
+              بررسی ویدئوهای جدید
+            </button>
+            <button id="sync-button" class="primary-button" type="button">
+              <span class="sync-icon" aria-hidden="true">↻</span>
+              دریافت کانال‌ها
+            </button>
+          </div>
+        </header>
+
+        <section id="scan-panel" class="scan-panel" hidden aria-live="polite">
+          <div class="spinner" aria-hidden="true"></div>
+          <div>
+            <strong id="scan-title">در حال بازکردن فهرست اشتراک‌ها…</strong>
+            <p id="scan-detail">ممکن است با توجه به تعداد کانال‌ها کمی طول بکشد.</p>
+          </div>
+          <button id="cancel-scan" class="ghost-button" type="button">لغو</button>
+        </section>
+
+        <section class="stats" aria-label="آمار">
+          <article><strong id="total-count">۰</strong><span>کل کانال‌ها</span></article>
+          <article><strong id="categorized-count">۰</strong><span>دسته‌بندی‌شده</span></article>
+          <article><strong id="uncategorized-count">۰</strong><span>بدون دسته</span></article>
+          <article><strong id="new-video-channel-count">۰</strong><span>دارای ویدئوی جدید</span></article>
+        </section>
+
+        <section class="toolbar" aria-label="ابزارهای فهرست">
+          <label class="search-box">
+            <span aria-hidden="true">⌕</span>
+            <input id="search-input" type="search" placeholder="جست‌وجوی نام کانال…" autocomplete="off">
+          </label>
+          <label class="sort-box">مرتب‌سازی
+            <select id="sort-select">
+              <option value="title-asc">نام: الف تا ی</option>
+              <option value="title-desc">نام: ی تا الف</option>
+              <option value="category">تعداد دسته‌ها</option>
+            </select>
+          </label>
+          <button id="clear-all-new" class="ghost-button" type="button" hidden>همه دیده شدند</button>
+        </section>
+
+        <div id="notice" class="notice" hidden role="status"></div>
+
+        <section id="empty-state" class="empty-state">
+          <img src="../icons/icon.svg" width="72" height="72" alt="">
+          <h2>فهرست شما آمادهٔ ساخته‌شدن است</h2>
+          <p>روی «دریافت از یوتیوب» بزنید. افزونه صفحهٔ اشتراک‌ها را باز می‌کند و تا انتهای فهرست پیش می‌رود.</p>
+          <button id="empty-sync-button" class="secondary-button" type="button">شروع دریافت</button>
+        </section>
+
+        <section id="channel-grid" class="channel-grid" aria-label="کانال‌ها"></section>
+      </main>
+    </div>
+
+    <script src="../shared/avatar-cache.js"></script>
+    <script src="../shared/channel-data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

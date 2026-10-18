@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>اشتراک‌های یوتیوب</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header>
+      <div class="heading">
+        <img src="../icons/icon.svg" alt="" width="30" height="30">
+        <div>
+          <strong>اشتراک‌های من</strong>
+          <small id="result-count">۰ کانال</small>
+        </div>
+      </div>
+      <button id="close-sidebar" class="icon-button" type="button" title="بستن پنل" aria-label="بستن پنل">×</button>
+    </header>
+
+    <div class="search-wrap">
+      <input id="search" type="search" placeholder="جست‌وجوی کانال…" aria-label="جست‌وجوی کانال">
+    </div>
+
+    <nav id="filters" aria-label="دسته‌ها"></nav>
+    <main id="channel-list" aria-live="polite"></main>
+
+    <footer>
+      <button id="open-dashboard" type="button">باز کردن داشبورد کامل</button>
+    </footer>
+    <script src="../shared/channel-data.js"></script>
+    <script src="../shared/avatar-cache.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

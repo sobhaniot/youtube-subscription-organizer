@@ -1,0 +1,365 @@
+@font-face {
+  font-family: "Vazirmatn YSO";
+  src: url("../fonts/Vazirmatn.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+.yso-category-action {
+  display: block !important;
+  flex: 0 0 auto !important;
+  align-self: center !important;
+}
+
+.yso-category-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 36px !important;
+  flex: 0 0 auto !important;
+  align-self: center !important;
+  margin-inline-start: 8px !important;
+  margin-inline-end: 0 !important;
+  border: 1px solid rgba(127, 127, 127, 0.42) !important;
+  border-radius: 18px !important;
+  padding: 0 15px !important;
+  color: var(--yt-spec-text-primary, #0f0f0f) !important;
+  background: var(--yt-spec-badge-chip-background, rgba(0, 0, 0, 0.05)) !important;
+  direction: rtl !important;
+  font-family: "Vazirmatn YSO", Tahoma, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+}
+
+.yso-category-button:hover {
+  background: var(--yt-spec-button-chip-background-hover, rgba(0, 0, 0, 0.1)) !important;
+}
+
+.yso-category-button[data-assigned="true"] {
+  border-color: #d9233f !important;
+  color: #d9233f !important;
+}
+
+.yso-overlay {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 20px !important;
+  background: rgba(0, 0, 0, 0.58) !important;
+  direction: rtl !important;
+}
+
+.yso-dialog {
+  width: min(410px, calc(100vw - 32px)) !important;
+  max-height: min(620px, calc(100vh - 40px)) !important;
+  border-radius: 16px !important;
+  padding: 20px !important;
+  color: #211f28 !important;
+  background: #fff !important;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.35) !important;
+  overflow-y: auto !important;
+  font-family: "Vazirmatn YSO", Tahoma, sans-serif !important;
+}
+
+.yso-dialog-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin-bottom: 16px !important;
+}
+
+.yso-dialog-header strong {
+  overflow: hidden !important;
+  font-size: 16px !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.yso-close {
+  flex: 0 0 auto !important;
+  width: 32px !important;
+  height: 32px !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  color: #514b57 !important;
+  background: #f1eef3 !important;
+  font-size: 20px !important;
+  cursor: pointer !important;
+}
+
+.yso-category-options {
+  display: grid !important;
+  gap: 7px !important;
+}
+
+.yso-option {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-height: 42px !important;
+  border: 1px solid #e6e1e9 !important;
+  border-radius: 10px !important;
+  padding: 8px 11px !important;
+  color: #2c2831 !important;
+  background: #fff !important;
+  cursor: pointer !important;
+}
+
+.yso-option:hover {
+  background: #faf8fb !important;
+}
+
+.yso-option input {
+  width: 17px !important;
+  height: 17px !important;
+  accent-color: #d9233f !important;
+}
+
+.yso-color-dot {
+  width: 9px !important;
+  height: 9px !important;
+  border-radius: 50% !important;
+  background: var(--yso-color, #d9233f) !important;
+}
+
+.yso-empty-message {
+  margin: 4px 0 14px !important;
+  color: #716b77 !important;
+  font-size: 12px !important;
+  line-height: 1.8 !important;
+}
+
+.yso-new-category {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 38px auto !important;
+  gap: 7px !important;
+  margin-top: 16px !important;
+  padding-top: 16px !important;
+  border-top: 1px solid #ece8ee !important;
+}
+
+.yso-new-category input[type="text"] {
+  min-width: 0 !important;
+  height: 38px !important;
+  border: 1px solid #dcd7df !important;
+  border-radius: 9px !important;
+  padding: 0 10px !important;
+  color: #211f28 !important;
+  background: #fff !important;
+  font-family: inherit !important;
+}
+
+.yso-new-category input[type="color"] {
+  width: 38px !important;
+  height: 38px !important;
+  border: 1px solid #dcd7df !important;
+  border-radius: 9px !important;
+  padding: 4px !important;
+  background: #fff !important;
+}
+
+.yso-new-category button {
+  border: 0 !important;
+  border-radius: 9px !important;
+  padding: 0 14px !important;
+  color: #fff !important;
+  background: #d9233f !important;
+  font-family: inherit !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+}
+
+[dark] .yso-dialog {
+  color: #f1edf3 !important;
+  background: #212121 !important;
+}
+
+[dark] .yso-option {
+  border-color: #464149 !important;
+  color: #f1edf3 !important;
+  background: #292929 !important;
+}
+
+[dark] .yso-option:hover,
+[dark] .yso-close {
+  color: #f1edf3 !important;
+  background: #3a373d !important;
+}
+
+[dark] .yso-empty-message {
+  color: #bbb4c0 !important;
+}
+
+[dark] .yso-new-category {
+  border-top-color: #464149 !important;
+}
+
+/* Compact subscription panel opened on top of YouTube. */
+#yso-site-sidebar {
+  --yso-site-sidebar-width: min(360px, 42vw) !important;
+  position: sticky !important;
+  z-index: 2147483646 !important;
+  top: 0 !important;
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  display: grid !important;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 100vh !important;
+  color: #242129 !important;
+  background: #fff !important;
+  border-right: 1px solid #ddd8e0 !important;
+  box-shadow: 12px 0 36px rgba(0, 0, 0, 0.22) !important;
+  direction: rtl !important;
+  font-family: Tahoma, "Segoe UI", sans-serif !important;
+  text-align: right !important;
+}
+
+/* Reserve real page space for the panel instead of covering YouTube. */
+html.yso-site-sidebar-open body {
+  display: grid !important;
+  grid-template-columns: min(360px, 42vw) minmax(0, 1fr) !important;
+  grid-template-rows: minmax(100vh, auto) !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+html.yso-site-sidebar-open body > ytd-app {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+html.yso-site-sidebar-open ytd-masthead {
+  box-sizing: border-box !important;
+  width: calc(100% - min(360px, 42vw)) !important;
+  left: min(360px, 42vw) !important;
+}
+
+html.yso-site-sidebar-open ytd-mini-guide-renderer {
+  left: min(360px, 42vw) !important;
+}
+
+.yso-site-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  min-height: 68px !important;
+  padding: 12px 14px !important;
+  border-bottom: 1px solid #ece8ee !important;
+}
+
+.yso-site-header > div,
+.yso-site-identity {
+  display: grid !important;
+  min-width: 0 !important;
+}
+
+.yso-site-header strong { font-size: 15px !important; }
+.yso-site-header small { margin-top: 3px !important; color: #746e78 !important; font-size: 11px !important; }
+
+.yso-site-close {
+  width: 34px !important;
+  height: 34px !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  color: #514b57 !important;
+  background: #f1eef3 !important;
+  font-size: 23px !important;
+  cursor: pointer !important;
+}
+
+.yso-site-search-wrap { padding: 10px 12px 7px !important; }
+.yso-site-search {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 38px !important;
+  border: 1px solid #ddd8e0 !important;
+  border-radius: 11px !important;
+  padding: 0 11px !important;
+  color: inherit !important;
+  background: #f8f6f9 !important;
+  font: inherit !important;
+  outline: 0 !important;
+}
+.yso-site-search:focus { border-color: #d9233f !important; box-shadow: 0 0 0 2px rgba(217, 35, 63, .12) !important; }
+
+.yso-site-filters {
+  display: flex !important;
+  gap: 6px !important;
+  padding: 3px 12px 10px !important;
+  overflow-x: auto !important;
+  scrollbar-width: thin !important;
+}
+.yso-site-filter {
+  display: inline-flex !important;
+  align-items: center !important;
+  flex: 0 0 auto !important;
+  gap: 6px !important;
+  height: 30px !important;
+  border: 1px solid #ded9e1 !important;
+  border-radius: 15px !important;
+  padding: 0 10px !important;
+  color: #3b3740 !important;
+  background: #fff !important;
+  font: 12px Tahoma, "Segoe UI", sans-serif !important;
+  cursor: pointer !important;
+}
+.yso-site-filter::before { content: "" !important; width: 7px !important; height: 7px !important; border-radius: 50% !important; background: var(--yso-filter-color) !important; }
+.yso-site-filter.is-active { border-color: var(--yso-filter-color) !important; background: color-mix(in srgb, var(--yso-filter-color) 9%, white) !important; }
+.yso-site-filter-count { color: #817a85 !important; font-size: 10px !important; }
+
+.yso-site-channel-list { padding: 0 8px 8px !important; overflow-y: auto !important; overscroll-behavior: contain !important; }
+.yso-site-channel {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-height: 62px !important;
+  border-bottom: 1px solid #f0edf1 !important;
+  padding: 6px 5px !important;
+}
+.yso-site-channel-main {
+  display: flex !important;
+  align-items: center !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  gap: 10px !important;
+  color: inherit !important;
+  text-decoration: none !important;
+}
+.yso-site-avatar {
+  position: relative !important;
+  display: grid !important;
+  place-items: center !important;
+  flex: 0 0 42px !important;
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 50% !important;
+  color: #fff !important;
+  background: #a54255 !important;
+  overflow: hidden !important;
+  font-size: 16px !important;
+}
+.yso-site-avatar img { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; object-fit: cover !important; }
+.yso-site-identity strong { overflow: hidden !important; font-size: 13px !important; line-height: 1.55 !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+.yso-site-identity small { overflow: hidden !important; color: #7d7681 !important; font-size: 10px !important; line-height: 1.5 !important; direction: ltr !important; text-align: right !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+.yso-site-new-badge { flex: 0 0 auto !important; border-radius: 11px !important; padding: 4px 7px !important; color: #087e4d !important; background: #e5f7ef !important; font-size: 10px !important; font-weight: 700 !important; text-decoration: none !important; white-space: nowrap !important; }
+.yso-site-empty { margin: 35px 14px !important; color: #77717b !important; font-size: 12px !important; line-height: 1.9 !important; text-align: center !important; }
+.yso-site-footer { padding: 10px 12px !important; border-top: 1px solid #ece8ee !important; }
+.yso-site-dashboard { width: 100% !important; height: 38px !important; border: 0 !important; border-radius: 10px !important; color: #fff !important; background: #d9233f !important; font: 700 12px Tahoma, "Segoe UI", sans-serif !important; cursor: pointer !important; }
+
+[dark] #yso-site-sidebar { color: #f3eff5 !important; background: #1f1f1f !important; border-right-color: #403b43 !important; }
+[dark] .yso-site-header, [dark] .yso-site-channel, [dark] .yso-site-footer { border-color: #3b373e !important; }
+[dark] .yso-site-header small, [dark] .yso-site-identity small, [dark] .yso-site-filter-count { color: #aaa3ae !important; }
+[dark] .yso-site-search, [dark] .yso-site-filter { color: #f3eff5 !important; background: #292929 !important; border-color: #4b464e !important; }
+[dark] .yso-site-filter.is-active { background: #3a3336 !important; }
+[dark] .yso-site-new-badge { color: #75dfb2 !important; background: #173c2d !important; }
