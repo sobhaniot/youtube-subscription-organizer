@@ -700,23 +700,32 @@ function waitForTabComplete(tabId, timeout = 30000) {
 }
 
 async function findOrOpenSubscriptionsTab() {
-  const tabs = await browser.tabs.query({ url: "*://www.youtube.com/feed/channels*" });
-  if (tabs.length > 0) {
-    const tab = tabs[0];
-    await browser.tabs.update(tab.id, { active: true });
-    if (tab.windowId) await browser.windows.update(tab.windowId, { focused: true });
-    const reloaded = waitForTabComplete(tab.id);
-    await browser.tabs.reload(tab.id);
-    await reloaded;
-    return tab.id;
-  }
-
   const tab = await browser.tabs.create({
     url: "https://www.youtube.com/feed/channels",
-    active: true
+    active: false
   });
-  await waitForTabComplete(tab.id);
-  return tab.id;
+  try {
+    await waitForTabComplete(tab.id);
+    return tab.id;
+  } catch (error) {
+    try {
+      await browser.tabs.remove(tab.id);
+    } catch {
+      // The tab may already have been closed.
+    }
+    throw error;
+  }
+}
+
+async function closeSubscriptionScanTab() {
+  const tabId = state.scanTabId;
+  state.scanTabId = null;
+  if (tabId === null) return;
+  try {
+    await browser.tabs.remove(tabId);
+  } catch {
+    // The tab may already have been closed.
+  }
 }
 
 async function findOrOpenVideoFeedTab() {
@@ -740,7 +749,7 @@ async function startScan() {
   if (state.scanning || state.videoScanning) return;
   setScanning(true);
   elements.scanTitle.textContent = "در حال بازکردن فهرست اشتراک‌ها…";
-  elements.scanDetail.textContent = "تب YouTube را تا پایان دریافت باز نگه دارید.";
+  elements.scanDetail.textContent = "فهرست در یک تب پس‌زمینه دریافت می‌شود؛ صفحهٔ فعلی باز می‌ماند.";
 
   try {
     const tabId = await findOrOpenSubscriptionsTab();
@@ -764,7 +773,7 @@ async function startScan() {
     elements.scanTitle.textContent = "در حال خواندن کانال‌ها…";
   } catch (error) {
     setScanning(false);
-    state.scanTabId = null;
+    await closeSubscriptionScanTab();
     showNotice(error instanceof Error ? error.message : String(error), true);
   }
 }
@@ -807,6 +816,7 @@ async function cancelScan() {
     } catch {
       // The YouTube tab may already be closed.
     }
+    await closeSubscriptionScanTab();
   }
   if (state.videoScanTabId) {
     try {
@@ -899,7 +909,7 @@ async function onScannerMessage(message) {
   if (message.type === "subscription-scan-progress") {
     setScanning(true);
     elements.scanTitle.textContent = `${faNumber(message.count)} کانال پیدا شد`;
-    elements.scanDetail.textContent = "در حال رفتن به انتهای فهرست؛ لطفاً تب YouTube را نبندید.";
+    elements.scanDetail.textContent = "در حال پیمایش فهرست در تب پس‌زمینه…";
   }
 
   if (message.type === "subscription-scan-complete") {
@@ -912,7 +922,7 @@ async function onScannerMessage(message) {
       channels.length < previousChannels.length * 0.6
     ) {
       setScanning(false);
-      state.scanTabId = null;
+      await closeSubscriptionScanTab();
       showNotice(
         `اسکن ناقص به نظر می‌رسد (${faNumber(channels.length)} از ${faNumber(previousChannels.length)} کانال). فهرست قبلی حفظ شد و هشداری ثبت نشد.`,
         true
@@ -939,7 +949,7 @@ async function onScannerMessage(message) {
     pruneRecentVideos();
     await saveData();
     setScanning(false);
-    state.scanTabId = null;
+    await closeSubscriptionScanTab();
     render();
     void repairMissingAvatars();
     showNotice(
@@ -953,13 +963,13 @@ async function onScannerMessage(message) {
 
   if (message.type === "subscription-scan-error") {
     setScanning(false);
-    state.scanTabId = null;
+    await closeSubscriptionScanTab();
     showNotice(message.message || "دریافت فهرست ناموفق بود.", true);
   }
 
   if (message.type === "subscription-scan-cancelled") {
     setScanning(false);
-    state.scanTabId = null;
+    await closeSubscriptionScanTab();
     showNotice("دریافت فهرست لغو شد.");
   }
 }
@@ -1035,7 +1045,16 @@ elements.importData.addEventListener("change", () => {
   const file = elements.importData.files?.[0];
   if (file) void importBackup(file);
 });
-browser.runtime.onMessage.addListener(onScannerMessage);
+browser.runtime.onMessage.addListener((message) => {
+  if (message?.type === "start-subscription-scan-from-sidebar") {
+    if (state.scanning || state.videoScanning) {
+      return Promise.resolve({ started: false, reason: "already-running" });
+    }
+    void startScan();
+    return Promise.resolve({ started: true });
+  }
+  return onScannerMessage(message);
+});
 browser.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local" || !changes[STORAGE_KEY]) return;
   const updated = normalizeData(changes[STORAGE_KEY].newValue);

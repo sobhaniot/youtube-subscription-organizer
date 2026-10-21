@@ -15,6 +15,11 @@ const avatarQueue = [];
 const pendingAvatarUpdates = new Map();
 let activeAvatarJobs = 0;
 let avatarSaveTimer = null;
+let subscriptionScanTabId = null;
+let subscriptionScanStartedHere = false;
+let delegatedScan = false;
+let scanSyncBaseline = null;
+let scanBusy = false;
 
 const elements = {
   count: document.querySelector("#result-count"),
@@ -22,8 +27,13 @@ const elements = {
   filters: document.querySelector("#filters"),
   list: document.querySelector("#channel-list"),
   close: document.querySelector("#close-sidebar"),
-  dashboard: document.querySelector("#open-dashboard")
+  refresh: document.querySelector("#refresh-channels"),
+  refreshStatus: document.querySelector("#refresh-status"),
+  version: document.querySelector("#extension-version")
 };
+
+const extensionVersion = browser.runtime.getManifest?.().version;
+elements.version.textContent = extensionVersion ? `نسخه ${extensionVersion}` : "";
 
 function normalize(value) {
   const source = value && typeof value === "object" ? value : {};
@@ -386,16 +396,223 @@ elements.filters.addEventListener("wheel", (event) => {
   elements.filters.scrollBy({ left: -event.deltaY, behavior: "auto" });
 }, { passive: false });
 elements.close.addEventListener("click", () => browser.sidebarAction.close());
-elements.dashboard.addEventListener("click", async () => {
-  const url = browser.runtime.getURL("dashboard/index.html");
-  const existing = await browser.tabs.query({ url });
-  if (existing.length) await browser.tabs.update(existing[0].id, { active: true });
-  else await browser.tabs.create({ url });
+function validScannedChannel(channel) {
+  return Boolean(channel && typeof channel.key === "string" && typeof channel.title === "string" &&
+    typeof channel.url === "string" && /^https:\/\/www\.youtube\.com\//.test(channel.url));
+}
+
+function pruneAssignments() {
+  const channelKeys = new Set(data.channels.map((channel) => channel.key));
+  const categoryIds = new Set(data.categories.map((category) => category.id));
+  const clean = {};
+  for (const [key, ids] of Object.entries(data.assignments)) {
+    if (!channelKeys.has(key) || !Array.isArray(ids)) continue;
+    const validIds = [...new Set(ids.filter((id) => categoryIds.has(id)))];
+    if (validIds.length) clean[key] = validIds;
+  }
+  data.assignments = clean;
+}
+
+function pruneRecentVideos() {
+  const channelKeys = new Set(data.channels.map((channel) => channel.key));
+  data.recentVideos = Object.fromEntries(
+    Object.entries(data.recentVideos).filter(([key, videos]) =>
+      channelKeys.has(key) && Array.isArray(videos) && videos.length
+    )
+  );
+}
+
+function setScanBusy(busy, message = "") {
+  scanBusy = busy;
+  elements.refresh.disabled = busy;
+  elements.refresh.textContent = busy ? "در حال رفرش…" : "رفرش کانال‌ها";
+  elements.refreshStatus.textContent = message;
+}
+
+function waitForTabComplete(tabId, timeout = 30000) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      browser.tabs.onUpdated.removeListener(listener);
+      reject(new Error("بارگذاری صفحهٔ YouTube بیش از حد طول کشید."));
+    }, timeout);
+    function listener(updatedTabId, changeInfo) {
+      if (updatedTabId !== tabId || changeInfo.status !== "complete") return;
+      window.clearTimeout(timer);
+      browser.tabs.onUpdated.removeListener(listener);
+      resolve();
+    }
+    browser.tabs.onUpdated.addListener(listener);
+  });
+}
+
+async function findOrOpenSubscriptionsTab() {
+  const tab = await browser.tabs.create({ url: "https://www.youtube.com/feed/channels", active: false });
+  try {
+    await waitForTabComplete(tab.id);
+    return tab.id;
+  } catch (error) {
+    try {
+      await browser.tabs.remove(tab.id);
+    } catch {
+      // The tab may already have been closed.
+    }
+    throw error;
+  }
+}
+
+async function closeSubscriptionScanTab() {
+  const tabId = subscriptionScanTabId;
+  subscriptionScanTabId = null;
+  if (tabId === null) return;
+  try {
+    await browser.tabs.remove(tabId);
+  } catch {
+    // The tab may already have been closed.
+  }
+}
+
+async function startSubscriptionScan() {
+  if (scanBusy) return;
+  subscriptionScanStartedHere = false;
+  delegatedScan = false;
+  scanSyncBaseline = data.lastSync;
+  setScanBusy(true, "در حال بازکردن فهرست اشتراک‌های YouTube…");
+  try {
+    const dashboardUrl = browser.runtime.getURL("dashboard/index.html");
+    const dashboards = await browser.tabs.query({ url: dashboardUrl });
+    if (dashboards.length) {
+      delegatedScan = true;
+      const response = await browser.runtime.sendMessage({ type: "start-subscription-scan-from-sidebar" });
+      if (response?.reason === "already-running") {
+        delegatedScan = false;
+        setScanBusy(false, "اسکن کانال‌ها از قبل در حال اجراست؛ فهرست پس از ذخیره به‌روز می‌شود.");
+        return;
+      }
+      if (!response?.started) throw new Error("داشبورد نتوانست اسکن کانال‌ها را شروع کند.");
+      setScanBusy(true, "داشبورد در حال دریافت کانال‌هاست؛ تا پایان اسکن باز بماند.");
+      return;
+    }
+
+    subscriptionScanTabId = await findOrOpenSubscriptionsTab();
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
+    let response;
+    try {
+      response = await browser.tabs.sendMessage(subscriptionScanTabId, { type: "start-subscription-scan" });
+    } catch {
+      const reloaded = waitForTabComplete(subscriptionScanTabId);
+      await browser.tabs.reload(subscriptionScanTabId);
+      await reloaded;
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      response = await browser.tabs.sendMessage(subscriptionScanTabId, { type: "start-subscription-scan" });
+    }
+    if (response?.reason === "already-running") {
+      setScanBusy(false, "اسکن کانال‌ها از قبل در حال اجراست؛ فهرست پس از ذخیره به‌روز می‌شود.");
+      await closeSubscriptionScanTab();
+      return;
+    }
+    if (!response?.started) throw new Error("اسکنر در صفحهٔ YouTube شروع نشد.");
+    subscriptionScanStartedHere = true;
+    setScanBusy(true, "در حال خواندن کانال‌ها در پس‌زمینه…");
+  } catch (error) {
+    await closeSubscriptionScanTab();
+    delegatedScan = false;
+    setScanBusy(false, error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function handleSubscriptionScanMessage(message) {
+  if (delegatedScan && message?.type?.startsWith("subscription-scan-")) {
+    if (message.type === "subscription-scan-progress") {
+      setScanBusy(true, `${faNumber(message.count || 0)} کانال پیدا شد؛ در حال پیمایش فهرست…`);
+    } else if (message.type === "subscription-scan-error") {
+      delegatedScan = false;
+      setScanBusy(false, message.message || "دریافت فهرست ناموفق بود.");
+    } else if (message.type === "subscription-scan-cancelled") {
+      delegatedScan = false;
+      setScanBusy(false, "رفرش کانال‌ها لغو شد.");
+    } else if (message.type === "subscription-scan-complete") {
+      setScanBusy(true, "اسکن تمام شد؛ در حال ذخیرهٔ فهرست…");
+    }
+    return;
+  }
+  if (!subscriptionScanStartedHere || !message?.type?.startsWith("subscription-scan-")) return;
+  if (message.type === "subscription-scan-progress") {
+    setScanBusy(true, `${faNumber(message.count || 0)} کانال پیدا شد؛ در حال پیمایش فهرست…`);
+    return;
+  }
+  if (message.type === "subscription-scan-error") {
+    subscriptionScanStartedHere = false;
+    await closeSubscriptionScanTab();
+    setScanBusy(false, message.message || "دریافت فهرست ناموفق بود.");
+    return;
+  }
+  if (message.type === "subscription-scan-cancelled") {
+    subscriptionScanStartedHere = false;
+    await closeSubscriptionScanTab();
+    setScanBusy(false, "رفرش کانال‌ها لغو شد.");
+    return;
+  }
+  if (message.type !== "subscription-scan-complete") return;
+
+  try {
+    // Reload the latest snapshot so category edits made while scanning are retained.
+    const stored = await browser.storage.local.get(STORAGE_KEY);
+    data = normalize(stored[STORAGE_KEY]);
+    const channels = Array.isArray(message.channels) ? message.channels.filter(validScannedChannel) : [];
+    const previousChannels = data.channels;
+    if (data.lastSync && previousChannels.length >= 10 && channels.length < previousChannels.length * 0.6) {
+      setScanBusy(false, `اسکن ناقص بود (${faNumber(channels.length)} از ${faNumber(previousChannels.length)} کانال)؛ فهرست قبلی حفظ شد.`);
+      return;
+    }
+    const scannedAt = message.scannedAt || new Date().toISOString();
+    const removed = data.lastSync
+      ? previousChannels.filter((oldChannel) => !channels.some((channel) =>
+        globalThis.YSOChannelData?.sameChannel(oldChannel, channel) || oldChannel.key === channel.key
+      )).map((channel) => ({ ...channel, detectedAt: scannedAt }))
+      : [];
+    data = normalize(globalThis.YSOChannelData?.replaceChannels(data, channels) || { ...data, channels });
+    data.lastSync = scannedAt;
+    if (removed.length) data.removedChannels = [...removed, ...data.removedChannels].slice(0, 1000);
+    pruneAssignments();
+    pruneRecentVideos();
+    await browser.storage.local.set({ [STORAGE_KEY]: data });
+    setScanBusy(false, removed.length
+      ? `${faNumber(channels.length)} کانال دریافت شد و حذف ${faNumber(removed.length)} کانال ثبت شد.`
+      : `${faNumber(channels.length)} کانال با موفقیت رفرش شد.`);
+    if (removed.length) {
+      const names = removed.slice(0, 3).map((channel) => channel.title).join("، ");
+      const extra = removed.length > 3 ? ` و ${faNumber(removed.length - 3)} کانال دیگر` : "";
+      try {
+        await browser.notifications.create(`removed-channels-${Date.now()}`, {
+          type: "basic",
+          iconUrl: browser.runtime.getURL("icons/icon.svg"),
+          title: removed.length === 1 ? "یک اشتراک حذف شده است" : `${faNumber(removed.length)} اشتراک حذف شده‌اند`,
+          message: `${names}${extra}`
+        });
+      } catch {
+        // Keep the removal notice in the sidebar if system notifications are unavailable.
+      }
+    }
+  } catch (error) {
+    setScanBusy(false, error instanceof Error ? error.message : "ذخیرهٔ فهرست ناموفق بود.");
+  } finally {
+    subscriptionScanStartedHere = false;
+    await closeSubscriptionScanTab();
+  }
+}
+
+elements.refresh.addEventListener("click", () => void startSubscriptionScan());
+browser.runtime.onMessage.addListener((message) => {
+  void handleSubscriptionScanMessage(message);
 });
 browser.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local" || !changes[STORAGE_KEY]) return;
   data = normalize(changes[STORAGE_KEY].newValue);
   render();
+  if (delegatedScan && data.lastSync && data.lastSync !== scanSyncBaseline) {
+    delegatedScan = false;
+    setScanBusy(false, `${faNumber(data.channels.length)} کانال با موفقیت رفرش شد.`);
+  }
 });
 
 void load();
