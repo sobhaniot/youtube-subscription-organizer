@@ -174,9 +174,31 @@
     return Boolean(explicitBadge);
   }
 
+  function channelIdentityValues(channel) {
+    return new Set([
+      channel?.key,
+      channel?.url,
+      ...(Array.isArray(channel?.aliases) ? channel.aliases : [])
+    ].map((value) => {
+      if (!value) return "";
+      try {
+        return new URL(value, location.origin).pathname.replace(/\/$/, "").toLocaleLowerCase();
+      } catch {
+        return String(value).replace(/\/$/, "").toLocaleLowerCase();
+      }
+    }).filter(Boolean));
+  }
+
+  function sameChannelIdentity(left, right) {
+    if (globalThis.YSOChannelData?.sameChannel(left, right)) return true;
+    const rightKeys = channelIdentityValues(right);
+    return [...channelIdentityValues(left)].some((key) => rightKeys.has(key));
+  }
+
   let guideSyncRunning = false;
   async function syncYouTubeNewChannels() {
     if (guideSyncRunning) return;
+    const currentInfo = currentChannelInfo();
     const entries = document.querySelectorAll(
       "ytd-guide-entry-renderer, ytd-mini-guide-entry-renderer, yt-guide-entry-renderer"
     );
@@ -193,14 +215,52 @@
           entry.querySelector("#endpoint, #label, yt-formatted-string")?.textContent?.trim() || ""
       });
     }
-    if (!observed.size) return;
+    if (!observed.size && !currentInfo) return;
 
     guideSyncRunning = true;
     try {
       const data = await getStoredData();
       const next = { ...data.youtubeNewChannels };
       let changed = false;
+      const viewedChannel = currentInfo && data.channels.find((channel) =>
+        sameChannelIdentity(channel, currentInfo)
+      );
+
+      if (viewedChannel) {
+        for (const key of Object.keys(data.recentVideos)) {
+          if (channelIdentityValues(viewedChannel).has(key.toLocaleLowerCase())) {
+            delete data.recentVideos[key];
+            changed = true;
+          }
+        }
+        for (const [key, status] of Object.entries(next)) {
+          const markerChannel = {
+            key,
+            url: `${location.origin}${key.startsWith("/") ? key : `/${key}`}`,
+            title: status?.title || ""
+          };
+          if (sameChannelIdentity(viewedChannel, markerChannel) ||
+              (viewedChannel.title && String(status?.title || "").trim().toLocaleLowerCase() ===
+                String(viewedChannel.title).trim().toLocaleLowerCase())) {
+            delete next[key];
+            changed = true;
+          }
+        }
+      }
+
       for (const [key, status] of observed) {
+        const observedChannel = {
+          key,
+          url: `${location.origin}${key}`,
+          title: status.title
+        };
+        if (viewedChannel && sameChannelIdentity(viewedChannel, observedChannel)) {
+          if (Object.hasOwn(next, key)) {
+            delete next[key];
+            changed = true;
+          }
+          continue;
+        }
         if (status.hasNew) {
           const previous = next[key];
           if (!previous || previous.title !== status.title) {
@@ -212,10 +272,9 @@
           changed = true;
         }
       }
-      if (changed) {
-        data.youtubeNewChannels = next;
-        await saveStoredData(data);
-      }
+      if (!changed) return;
+      data.youtubeNewChannels = next;
+      await saveStoredData(data);
     } finally {
       guideSyncRunning = false;
     }
@@ -496,3 +555,4 @@
   });
   refreshForNavigation();
 })();
+
