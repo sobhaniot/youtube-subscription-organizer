@@ -318,7 +318,151 @@ function createAvatar(channel) {
 
 async function openInActiveTab(url) {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id) await browser.tabs.update(tab.id, { url });
+  if (!tab?.id) return;
+
+  if (/^https?:\/\/(?:www\.)?youtube\.com\//i.test(tab.url || "")) {
+    try {
+      const results = await browser.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "MAIN",
+        args: [url],
+        func: async (channelUrl) => {
+          const target = new URL(channelUrl, location.origin);
+          if (target.origin !== location.origin) return { navigated: false };
+          const targetPath = target.pathname.replace(/\/$/, "");
+          if (!targetPath) return { navigated: false };
+          if (location.pathname.replace(/\/$/, "") === targetPath) return { navigated: true };
+
+          function findBrowseEndpoint(value, depth = 0, visited = new WeakSet()) {
+            if (!value || typeof value !== "object" || depth > 12 || visited.has(value)) return null;
+            visited.add(value);
+            const endpoint = value.navigationEndpoint || value.endpoint || value;
+            const browse = endpoint?.browseEndpoint;
+            const metadata = endpoint?.commandMetadata?.webCommandMetadata;
+            if (browse?.browseId &&
+                (browse.canonicalBaseUrl === targetPath || metadata?.url === targetPath)) {
+              return endpoint;
+            }
+            for (const child of Object.values(value)) {
+              const found = findBrowseEndpoint(child, depth + 1, visited);
+              if (found) return found;
+            }
+            return null;
+          }
+
+          let endpoint = null;
+          const nativeLink = [...document.querySelectorAll("a[href]")].find((link) => {
+            try {
+              const candidate = new URL(link.href, location.origin);
+              return candidate.origin === location.origin &&
+                candidate.pathname.replace(/\/$/, "") === targetPath;
+            } catch {
+              return false;
+            }
+          });
+          for (let node = nativeLink; node && node !== document; node = node.parentElement) {
+            endpoint = findBrowseEndpoint(node.data) ||
+              findBrowseEndpoint(node.__data?.data) ||
+              findBrowseEndpoint(node.__data);
+            if (endpoint) break;
+          }
+
+          if (!endpoint) {
+            const config = window.ytcfg;
+            const apiKey = config?.get?.("INNERTUBE_API_KEY");
+            const context = config?.get?.("INNERTUBE_CONTEXT");
+            if (!apiKey || !context) return { navigated: false };
+            const response = await fetch(
+              `/youtubei/v1/navigation/resolve_url?key=${encodeURIComponent(apiKey)}&prettyPrint=false`,
+              {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ context, url: target.href })
+              }
+            );
+            if (!response.ok) return { navigated: false };
+            const resolved = await response.json();
+            endpoint = resolved.endpoint || resolved.command || null;
+          }
+
+          if (!endpoint?.browseEndpoint?.browseId) return { navigated: false };
+          const webCommandMetadata = endpoint.commandMetadata?.webCommandMetadata || {};
+          const navigationEndpoint = {
+            ...endpoint,
+            commandMetadata: {
+              ...endpoint.commandMetadata,
+              webCommandMetadata: {
+                ...webCommandMetadata,
+                url: targetPath,
+                webPageType: "WEB_PAGE_TYPE_CHANNEL",
+                apiUrl: "/youtubei/v1/browse",
+                rootVe: webCommandMetadata.rootVe || 3611
+              }
+            },
+            browseEndpoint: {
+              ...endpoint.browseEndpoint,
+              canonicalBaseUrl: endpoint.browseEndpoint.canonicalBaseUrl || targetPath
+            }
+          };
+          const app = document.querySelector("ytd-app");
+          if (!app) return { navigated: false };
+          app.dispatchEvent(new CustomEvent("yt-navigate", {
+            bubbles: true,
+            composed: true,
+            detail: { endpoint: navigationEndpoint }
+          }));
+          return { navigated: true };
+        }
+      });
+      if (results?.some((entry) => entry.result?.navigated)) return;
+    } catch {
+      // Keep the active YouTube page in place if SPA navigation is unavailable.
+    }
+    return;
+  }
+
+  await browser.tabs.update(tab.id, { url });
+}
+
+function normalizedChannelIdentity(value) {
+  try {
+    return new URL(value, "https://www.youtube.com").pathname.replace(/\/$/, "").toLocaleLowerCase();
+  } catch {
+    return String(value || "").replace(/\/$/, "").toLocaleLowerCase();
+  }
+}
+
+async function markChannelSeen(channel) {
+  const identities = new Set([
+    channel.key,
+    channel.url,
+    ...(Array.isArray(channel.aliases) ? channel.aliases : [])
+  ].map(normalizedChannelIdentity).filter(Boolean));
+  const title = String(channel.title || "").trim().toLocaleLowerCase();
+  const recentVideos = Object.fromEntries(
+    Object.entries(data.recentVideos).filter(([key]) => !identities.has(normalizedChannelIdentity(key)))
+  );
+  const youtubeNewChannels = Object.fromEntries(
+    Object.entries(data.youtubeNewChannels).filter(([key, status]) => {
+      if (identities.has(normalizedChannelIdentity(key))) return false;
+      return !title || String(status?.title || "").trim().toLocaleLowerCase() !== title;
+    })
+  );
+  if (Object.keys(recentVideos).length === Object.keys(data.recentVideos).length &&
+      Object.keys(youtubeNewChannels).length === Object.keys(data.youtubeNewChannels).length) return;
+
+  data = { ...data, recentVideos, youtubeNewChannels };
+  await browser.storage.local.set({ [STORAGE_KEY]: data });
+}
+
+async function openChannel(channel) {
+  try {
+    await markChannelSeen(channel);
+  } catch {
+    // Opening the channel should still work if the local seen-state cannot be saved.
+  }
+  await openInActiveTab(channel.url);
 }
 
 function createChannel(channel) {
@@ -330,7 +474,7 @@ function createChannel(channel) {
   link.append(createAvatar(channel));
   link.addEventListener("click", (event) => {
     event.preventDefault();
-    void openInActiveTab(channel.url);
+    void openChannel(channel);
   });
 
   const identity = document.createElement("span");
@@ -616,3 +760,4 @@ browser.storage.onChanged.addListener((changes, areaName) => {
 });
 
 void load();
+
