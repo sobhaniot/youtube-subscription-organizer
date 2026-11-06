@@ -67,3 +67,30 @@ button.secondary:hover {
   font-display: swap;
 }
 
+body {
+  min-width: 300px;
+  color: #211f2a;
+  background: #faf8fc;
+  font-family: "Vazirmatn YSO", Tahoma, sans-serif;
+}
+
+.language-setting {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #6d6878;
+  font-size: 12px;
+}
+
+.language-setting select {
+  border: 1px solid #ded9e5;
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: #fff;
+  font: inherit;
+}
+
+.yso-english { font-family: Arial, "Segoe UI", sans-serif; }
+

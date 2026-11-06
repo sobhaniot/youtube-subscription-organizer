@@ -14,8 +14,11 @@ const initialState = {
   lastSync: null,
   recentVideos: {},
   youtubeNewChannels: {},
+  seenYoutubeNewChannels: {},
   knownVideoIds: [],
   lastVideoCheck: null,
+  videoScanResumeAfterId: null,
+  videoScanResumeDepth: 0,
   removedChannels: []
 };
 
@@ -61,7 +64,7 @@ const elements = {
 };
 
 function faNumber(value) {
-  return new Intl.NumberFormat("fa-IR").format(value);
+  return new Intl.NumberFormat(window.ysoLanguage?.get() === "en" ? "en-US" : "fa-IR").format(value);
 }
 
 function normalizeData(value) {
@@ -76,8 +79,15 @@ function normalizeData(value) {
     youtubeNewChannels: source.youtubeNewChannels && typeof source.youtubeNewChannels === "object"
       ? source.youtubeNewChannels
       : {},
+    seenYoutubeNewChannels: source.seenYoutubeNewChannels && typeof source.seenYoutubeNewChannels === "object"
+      ? source.seenYoutubeNewChannels
+      : {},
     knownVideoIds: Array.isArray(source.knownVideoIds) ? source.knownVideoIds.filter((id) => typeof id === "string") : [],
     lastVideoCheck: typeof source.lastVideoCheck === "string" ? source.lastVideoCheck : null,
+    videoScanResumeAfterId: typeof source.videoScanResumeAfterId === "string" ? source.videoScanResumeAfterId : null,
+    videoScanResumeDepth: Number.isSafeInteger(source.videoScanResumeDepth) && source.videoScanResumeDepth > 0
+      ? source.videoScanResumeDepth
+      : 0,
     removedChannels: Array.isArray(source.removedChannels)
       ? source.removedChannels.filter((channel) => isValidChannel(channel) && typeof channel.detectedAt === "string")
       : []
@@ -157,7 +167,10 @@ function pruneRecentVideos() {
     if (unique.length) clean[key] = unique.slice(0, 12);
   }
   state.data.recentVideos = clean;
-  state.data.knownVideoIds = [...new Set(state.data.knownVideoIds)].slice(-5000);
+  const knownVideoIdLimit = state.data.videoScanResumeAfterId
+    ? Math.max(5000, state.data.videoScanResumeDepth)
+    : 5000;
+  state.data.knownVideoIds = [...new Set(state.data.knownVideoIds)].slice(-knownVideoIdLimit);
 }
 
 function categoryCount(categoryId) {
@@ -185,6 +198,7 @@ function createCategoryRow(id, name, color, editable = false) {
 
   const label = document.createElement("span");
   label.textContent = name;
+  if (editable) label.dataset.ysoUserContent = "true";
 
   const count = document.createElement("span");
   count.className = "count";
@@ -386,6 +400,7 @@ function createChannelCard(channel) {
   link.rel = "noopener noreferrer";
   link.textContent = channel.title;
   link.title = channel.title;
+  link.dataset.ysoUserContent = "true";
 
   body.append(link);
   const identity = channelHandle(channel);
@@ -393,6 +408,7 @@ function createChannelCard(channel) {
     const handle = document.createElement("span");
     handle.className = "channel-handle";
     handle.textContent = identity;
+    handle.dataset.ysoUserContent = "true";
     body.append(handle);
   }
 
@@ -412,6 +428,7 @@ function createChannelCard(channel) {
       chip.className = `chip${assigned.has(category.id) ? " selected" : ""}`;
       chip.style.setProperty("--chip-color", category.color);
       chip.textContent = category.name;
+      chip.dataset.ysoUserContent = "true";
       chip.setAttribute("aria-pressed", String(assigned.has(category.id)));
       chip.addEventListener("click", () => toggleAssignment(channel.key, category.id));
       chips.append(chip);
@@ -461,6 +478,7 @@ function createChannelCard(channel) {
       const title = document.createElement("strong");
       title.textContent = video.title;
       title.title = video.title;
+      title.dataset.ysoUserContent = "true";
       text.append(title);
       if (video.publishedText) {
         const published = document.createElement("small");
@@ -505,8 +523,9 @@ function createRemovedChannelCard(channel) {
   link.target = "_blank";
   link.rel = "noopener noreferrer";
   link.textContent = channel.title;
+  link.dataset.ysoUserContent = "true";
 
-  const detected = new Intl.DateTimeFormat("fa-IR", {
+  const detected = new Intl.DateTimeFormat(window.ysoLanguage?.get() === "en" ? "en-US" : "fa-IR", {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(channel.detectedAt));
@@ -564,7 +583,7 @@ function renderStats() {
   elements.newVideoChannelCount.textContent = faNumber(channelsWithNew);
   elements.clearAllNew.hidden = channelsWithNew === 0;
 
-  const formatter = new Intl.DateTimeFormat("fa-IR", {
+  const formatter = new Intl.DateTimeFormat(window.ysoLanguage?.get() === "en" ? "en-US" : "fa-IR", {
       dateStyle: "medium",
       timeStyle: "short"
   });
@@ -614,14 +633,17 @@ async function editCategory(categoryId) {
   const category = state.data.categories.find((item) => item.id === categoryId);
   if (!category) return;
 
+  const english = window.ysoLanguage?.get() === "en";
   const action = window.prompt(
-    `برای تغییر نام، نام جدید را بنویسید. برای حذف کامل دسته، عبارت «حذف» را وارد کنید.\n\nنام فعلی: ${category.name}`,
+    english
+      ? `Enter a new name to rename the category. Type “Delete” to remove it.\n\nCurrent name: ${category.name}`
+      : `برای تغییر نام، نام جدید را بنویسید. برای حذف کامل دسته، عبارت «حذف» را وارد کنید.\n\nنام فعلی: ${category.name}`,
     category.name
   );
   if (action === null) return;
 
   const value = action.trim();
-  if (value === "حذف") {
+  if (value === (english ? "Delete" : "حذف")) {
     state.data.categories = state.data.categories.filter((item) => item.id !== categoryId);
     for (const [key, ids] of Object.entries(state.data.assignments)) {
       const remaining = ids.filter((id) => id !== categoryId);
@@ -648,13 +670,18 @@ function showNotice(message, isError = false) {
 
 async function notifyRemovedChannels(channels) {
   if (channels.length === 0) return;
-  const firstNames = channels.slice(0, 3).map((channel) => channel.title).join("، ");
-  const extra = channels.length > 3 ? ` و ${faNumber(channels.length - 3)} کانال دیگر` : "";
+  const english = window.ysoLanguage?.get() === "en";
+  const firstNames = channels.slice(0, 3).map((channel) => channel.title).join(english ? ", " : "، ");
+  const extra = channels.length > 3
+    ? english ? ` and ${faNumber(channels.length - 3)} more channels` : ` و ${faNumber(channels.length - 3)} کانال دیگر`
+    : "";
   try {
     await browser.notifications.create(`removed-channels-${Date.now()}`, {
       type: "basic",
-      iconUrl: browser.runtime.getURL("icons/icon.svg"),
-      title: channels.length === 1 ? "یک اشتراک حذف شده است" : `${faNumber(channels.length)} اشتراک حذف شده‌اند`,
+      iconUrl: browser.runtime.getURL("icons/icon-96.png"),
+      title: english
+        ? channels.length === 1 ? "A subscription was removed" : `${faNumber(channels.length)} subscriptions were removed`
+        : channels.length === 1 ? "یک اشتراک حذف شده است" : `${faNumber(channels.length)} اشتراک حذف شده‌اند`,
       message: `${firstNames}${extra}`
     });
   } catch {
@@ -729,20 +756,32 @@ async function closeSubscriptionScanTab() {
 }
 
 async function findOrOpenVideoFeedTab() {
-  const tabs = await browser.tabs.query({ url: "*://www.youtube.com/feed/subscriptions*" });
-  if (tabs.length > 0) {
-    const tab = tabs[0];
-    await browser.tabs.update(tab.id, { active: true });
-    if (tab.windowId) await browser.windows.update(tab.windowId, { focused: true });
-    return tab.id;
-  }
-
   const tab = await browser.tabs.create({
     url: "https://www.youtube.com/feed/subscriptions",
-    active: true
+    active: false
   });
-  await waitForTabComplete(tab.id);
-  return tab.id;
+  try {
+    await waitForTabComplete(tab.id);
+    return tab.id;
+  } catch (error) {
+    try {
+      await browser.tabs.remove(tab.id);
+    } catch {
+      // The tab may already have been closed.
+    }
+    throw error;
+  }
+}
+
+async function closeVideoScanTab() {
+  const tabId = state.videoScanTabId;
+  state.videoScanTabId = null;
+  if (tabId === null) return;
+  try {
+    await browser.tabs.remove(tabId);
+  } catch {
+    // The tab may already have been closed.
+  }
 }
 
 async function startScan() {
@@ -782,21 +821,27 @@ async function startVideoScan() {
   if (state.scanning || state.videoScanning) return;
   setVideoScanning(true);
   elements.scanTitle.textContent = "در حال بازکردن فید اشتراک‌ها…";
-  elements.scanDetail.textContent = "جدیدترین ویدئوهای کانال‌های دنبال‌شده بررسی می‌شوند.";
+  elements.scanDetail.textContent = "فید تا رسیدن به ویدئوهای قبلی پیمایش می‌شود؛ صفحهٔ فعلی باز می‌ماند.";
 
   try {
     const tabId = await findOrOpenVideoFeedTab();
     state.videoScanTabId = tabId;
+    const scanMessage = {
+      type: "start-video-scan",
+      knownVideoIds: state.data.knownVideoIds,
+      resumeAfterId: state.data.videoScanResumeAfterId,
+      resumeDepth: state.data.videoScanResumeDepth
+    };
     await new Promise((resolve) => window.setTimeout(resolve, 500));
     let response;
     try {
-      response = await browser.tabs.sendMessage(tabId, { type: "start-video-scan" });
+      response = await browser.tabs.sendMessage(tabId, scanMessage);
     } catch {
       const reloaded = waitForTabComplete(tabId);
       await browser.tabs.reload(tabId);
       await reloaded;
       await new Promise((resolve) => window.setTimeout(resolve, 500));
-      response = await browser.tabs.sendMessage(tabId, { type: "start-video-scan" });
+      response = await browser.tabs.sendMessage(tabId, scanMessage);
     }
     if (!response?.started && response?.reason !== "already-running") {
       throw new Error("بررسی ویدئوهای جدید شروع نشد.");
@@ -804,7 +849,7 @@ async function startVideoScan() {
     elements.scanTitle.textContent = "در حال بررسی ویدئوها…";
   } catch (error) {
     setVideoScanning(false);
-    state.videoScanTabId = null;
+    await closeVideoScanTab();
     showNotice(error instanceof Error ? error.message : String(error), true);
   }
 }
@@ -824,6 +869,7 @@ async function cancelScan() {
     } catch {
       // The YouTube tab may already be closed.
     }
+    await closeVideoScanTab();
   }
   setScanning(false);
   setVideoScanning(false);
@@ -837,7 +883,10 @@ async function onScannerMessage(message) {
   if (message.type === "video-scan-progress") {
     setVideoScanning(true);
     elements.scanTitle.textContent = `${faNumber(message.count)} ویدئو بررسی شد`;
-    elements.scanDetail.textContent = "در حال مقایسه با بررسی قبلی…";
+    const boundaryProgress = Number.isFinite(message.knownBoundaryProgress)
+      ? ` (${faNumber(message.knownBoundaryProgress)}/۱۲ ویدئوی قبلی)`
+      : "";
+    elements.scanDetail.textContent = `در حال پیمایش فید تا رسیدن به ویدئوهای قبلی…${boundaryProgress}`;
   }
 
   if (message.type === "video-scan-complete") {
@@ -873,34 +922,50 @@ async function onScannerMessage(message) {
       ].slice(0, 12);
     }
 
+    const knownVideoIdLimit = message.stopReason === "safety-limit" && Number.isSafeInteger(message.resumeDepth)
+      ? Math.max(5000, message.resumeDepth)
+      : 5000;
     state.data.knownVideoIds = [
       ...state.data.knownVideoIds,
       ...videos.map((video) => video.videoId)
-    ].slice(-5000);
+    ].slice(-knownVideoIdLimit);
+    state.data.videoScanResumeAfterId =
+      message.stopReason === "safety-limit" && typeof message.resumeAfterId === "string"
+        ? message.resumeAfterId
+        : null;
+    state.data.videoScanResumeDepth = state.data.videoScanResumeAfterId &&
+      Number.isSafeInteger(message.resumeDepth) && message.resumeDepth > 0
+      ? message.resumeDepth
+      : 0;
     state.data = normalizeData(globalThis.YSOChannelData?.reconcile(state.data) || state.data);
     state.data.lastVideoCheck = message.checkedAt || new Date().toISOString();
     pruneRecentVideos();
     await saveData();
     setVideoScanning(false);
-    state.videoScanTabId = null;
+    await closeVideoScanTab();
     render();
     const newChannelCount = new Set(accepted.map((video) => video.channelKey)).size;
+    const partialNote = message.stopReason === "safety-limit"
+      ? " اسکن برای ادامه در نوبت بعدی ذخیره شد."
+      : "";
     showNotice(
       accepted.length > 0
-        ? `${faNumber(accepted.length)} ویدئوی جدید از ${faNumber(newChannelCount)} کانال پیدا شد.`
-        : "ویدئوی جدیدی نسبت به بررسی قبلی پیدا نشد."
+        ? `${faNumber(accepted.length)} ویدئوی جدید از ${faNumber(newChannelCount)} کانال پیدا شد.${partialNote}`
+        : message.stopReason === "safety-limit"
+          ? "فید طولانی بود؛ ادامهٔ اسکن برای نوبت بعدی ذخیره شد."
+          : "ویدئوی جدیدی نسبت به بررسی قبلی پیدا نشد."
     );
   }
 
   if (message.type === "video-scan-error") {
     setVideoScanning(false);
-    state.videoScanTabId = null;
+    await closeVideoScanTab();
     showNotice(message.message || "بررسی ویدئوها ناموفق بود.", true);
   }
 
   if (message.type === "video-scan-cancelled") {
     setVideoScanning(false);
-    state.videoScanTabId = null;
+    await closeVideoScanTab();
     showNotice("بررسی ویدئوهای جدید لغو شد.");
   }
 
@@ -1061,5 +1126,6 @@ browser.storage.onChanged.addListener((changes, areaName) => {
   state.data = normalizeData(globalThis.YSOChannelData?.reconcile(updated) || updated);
   render();
 });
+window.addEventListener("yso-language-changed", () => render());
 
 void loadData();

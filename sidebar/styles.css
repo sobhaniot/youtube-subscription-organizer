@@ -234,6 +234,28 @@ footer {
   border-top: 1px solid var(--border);
 }
 
+.language-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.language-setting select {
+  min-width: 105px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  color: var(--text);
+  background: var(--background);
+  font: inherit;
+}
+
+.yso-english { font-family: Arial, "Segoe UI", sans-serif; }
+
 #refresh-status {
   display: block;
   min-height: 0;
@@ -258,6 +280,54 @@ footer {
 }
 
 #refresh-channels:disabled { opacity: 0.65; cursor: wait; }
+
+.diagnostic-button,
+.diagnostic-actions button {
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.diagnostic-button:disabled { opacity: .6; cursor: wait; }
+
+#diagnostic-dialog {
+  width: min(94vw, 520px);
+  max-height: 84vh;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--text);
+  background: var(--background);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .24);
+}
+
+#diagnostic-dialog::backdrop { background: rgba(20, 16, 25, .48); }
+#diagnostic-title { margin: 0 0 8px; font-size: 15px; }
+#diagnostic-dialog p { color: var(--muted); font-size: 11px; line-height: 1.7; }
+#diagnostic-output {
+  width: 100%;
+  height: min(52vh, 420px);
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  color: var(--text);
+  background: var(--surface);
+  font: 11px/1.5 Consolas, monospace;
+  direction: ltr;
+  text-align: left;
+  resize: vertical;
+}
+.diagnostic-actions { display: flex; gap: 8px; }
+.diagnostic-actions button { margin: 0; }
+.diagnostic-actions button:first-child { color: #fff; border-color: var(--accent); background: var(--accent); }
 
 #extension-version {
   display: block;

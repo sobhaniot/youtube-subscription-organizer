@@ -5,7 +5,10 @@ const ALL = "__all__";
 const WITH_NEW = "__with_new_videos__";
 const UNCATEGORIZED = "__uncategorized__";
 
-let data = { channels: [], categories: [], assignments: {}, recentVideos: {}, youtubeNewChannels: {} };
+let data = {
+  channels: [], categories: [], assignments: {}, recentVideos: {}, youtubeNewChannels: {},
+  seenYoutubeNewChannels: {}
+};
 let presentation = data;
 let filter = ALL;
 let query = "";
@@ -29,7 +32,12 @@ const elements = {
   close: document.querySelector("#close-sidebar"),
   refresh: document.querySelector("#refresh-channels"),
   refreshStatus: document.querySelector("#refresh-status"),
-  version: document.querySelector("#extension-version")
+  version: document.querySelector("#extension-version"),
+  diagnose: document.querySelector("#diagnose-blue-dots"),
+  diagnosticDialog: document.querySelector("#diagnostic-dialog"),
+  diagnosticOutput: document.querySelector("#diagnostic-output"),
+  copyDiagnostic: document.querySelector("#copy-diagnostic"),
+  closeDiagnostic: document.querySelector("#close-diagnostic")
 };
 
 const extensionVersion = browser.runtime.getManifest?.().version;
@@ -45,6 +53,9 @@ function normalize(value) {
     recentVideos: source.recentVideos && typeof source.recentVideos === "object" ? source.recentVideos : {},
     youtubeNewChannels: source.youtubeNewChannels && typeof source.youtubeNewChannels === "object"
       ? source.youtubeNewChannels
+      : {},
+    seenYoutubeNewChannels: source.seenYoutubeNewChannels && typeof source.seenYoutubeNewChannels === "object"
+      ? source.seenYoutubeNewChannels
       : {}
   };
 }
@@ -88,7 +99,7 @@ function assignmentIdsFor(channel) {
 }
 
 function faNumber(value) {
-  return new Intl.NumberFormat("fa-IR").format(value);
+  return new Intl.NumberFormat(window.ysoLanguage?.get() === "en" ? "en-US" : "fa-IR").format(value);
 }
 
 function channelHandle(channel) {
@@ -289,6 +300,7 @@ function createFilter(id, label, color, reorderable = false) {
   }
   const name = document.createElement("span");
   name.textContent = label;
+  if (reorderable) name.dataset.ysoUserContent = "true";
   const count = document.createElement("span");
   count.className = "filter-count";
   count.textContent = faNumber(countFor(id));
@@ -449,10 +461,19 @@ async function markChannelSeen(channel) {
       return !title || String(status?.title || "").trim().toLocaleLowerCase() !== title;
     })
   );
+  const seenYoutubeNewChannels = {
+    ...data.seenYoutubeNewChannels,
+    [channel.key]: {
+      title: channel.title || "",
+      seenAt: new Date().toISOString()
+    }
+  };
+  const markerAlreadySeen = data.seenYoutubeNewChannels?.[channel.key];
   if (Object.keys(recentVideos).length === Object.keys(data.recentVideos).length &&
-      Object.keys(youtubeNewChannels).length === Object.keys(data.youtubeNewChannels).length) return;
+      Object.keys(youtubeNewChannels).length === Object.keys(data.youtubeNewChannels).length &&
+      markerAlreadySeen) return;
 
-  data = { ...data, recentVideos, youtubeNewChannels };
+  data = { ...data, recentVideos, youtubeNewChannels, seenYoutubeNewChannels };
   await browser.storage.local.set({ [STORAGE_KEY]: data });
 }
 
@@ -481,11 +502,13 @@ function createChannel(channel) {
   identity.className = "identity";
   const name = document.createElement("strong");
   name.textContent = channel.title || "کانال بدون نام";
+  name.dataset.ysoUserContent = "true";
   identity.append(name);
   const handle = channelHandle(channel);
   if (handle) {
     const small = document.createElement("small");
     small.textContent = handle;
+    small.dataset.ysoUserContent = "true";
     identity.append(small);
   }
   link.append(identity);
@@ -540,6 +563,41 @@ elements.filters.addEventListener("wheel", (event) => {
   elements.filters.scrollBy({ left: -event.deltaY, behavior: "auto" });
 }, { passive: false });
 elements.close.addEventListener("click", () => browser.sidebarAction.close());
+
+async function diagnoseBlueDots() {
+  elements.diagnose.disabled = true;
+  elements.diagnosticOutput.value = "Collecting diagnostics…";
+  elements.diagnosticDialog.showModal();
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url || !/^https?:\/\/(?:www\.)?youtube\.com\//i.test(tab.url)) {
+      elements.diagnosticOutput.value = "برای تشخیص، YouTube را باز کنید و دوباره بزنید.";
+      return;
+    }
+    const report = await browser.tabs.sendMessage(tab.id, { type: "diagnose-youtube-blue-dots" });
+    elements.diagnosticOutput.value = JSON.stringify(report, null, 2);
+  } catch (error) {
+    elements.diagnosticOutput.value = "ارتباط با صفحهٔ YouTube برقرار نشد. صفحه را تازه‌سازی کنید و دوباره بزنید.\n\n" +
+      String(error?.message || error);
+  } finally {
+    elements.diagnose.disabled = false;
+  }
+}
+
+elements.diagnose.addEventListener("click", () => void diagnoseBlueDots());
+elements.closeDiagnostic.addEventListener("click", () => elements.diagnosticDialog.close());
+elements.copyDiagnostic.addEventListener("click", async () => {
+  elements.diagnosticOutput.focus();
+  elements.diagnosticOutput.select();
+  try {
+    await navigator.clipboard.writeText(elements.diagnosticOutput.value);
+    elements.copyDiagnostic.textContent = "گزارش کپی شد";
+  } catch {
+    document.execCommand("copy");
+    elements.copyDiagnostic.textContent = "گزارش کپی شد";
+  }
+  window.setTimeout(() => { elements.copyDiagnostic.textContent = "کپی گزارش"; }, 1600);
+});
 function validScannedChannel(channel) {
   return Boolean(channel && typeof channel.key === "string" && typeof channel.title === "string" &&
     typeof channel.url === "string" && /^https:\/\/www\.youtube\.com\//.test(channel.url));
@@ -724,13 +782,18 @@ async function handleSubscriptionScanMessage(message) {
       ? `${faNumber(channels.length)} کانال دریافت شد و حذف ${faNumber(removed.length)} کانال ثبت شد.`
       : `${faNumber(channels.length)} کانال با موفقیت رفرش شد.`);
     if (removed.length) {
-      const names = removed.slice(0, 3).map((channel) => channel.title).join("، ");
-      const extra = removed.length > 3 ? ` و ${faNumber(removed.length - 3)} کانال دیگر` : "";
+      const english = window.ysoLanguage?.get() === "en";
+      const names = removed.slice(0, 3).map((channel) => channel.title).join(english ? ", " : "، ");
+      const extra = removed.length > 3
+        ? english ? ` and ${faNumber(removed.length - 3)} more channels` : ` و ${faNumber(removed.length - 3)} کانال دیگر`
+        : "";
       try {
         await browser.notifications.create(`removed-channels-${Date.now()}`, {
           type: "basic",
-          iconUrl: browser.runtime.getURL("icons/icon.svg"),
-          title: removed.length === 1 ? "یک اشتراک حذف شده است" : `${faNumber(removed.length)} اشتراک حذف شده‌اند`,
+          iconUrl: browser.runtime.getURL("icons/icon-96.png"),
+          title: english
+            ? removed.length === 1 ? "A subscription was removed" : `${faNumber(removed.length)} subscriptions were removed`
+            : removed.length === 1 ? "یک اشتراک حذف شده است" : `${faNumber(removed.length)} اشتراک حذف شده‌اند`,
           message: `${names}${extra}`
         });
       } catch {
@@ -758,6 +821,7 @@ browser.storage.onChanged.addListener((changes, areaName) => {
     setScanBusy(false, `${faNumber(data.channels.length)} کانال با موفقیت رفرش شد.`);
   }
 });
+window.addEventListener("yso-language-changed", () => render());
 
 void load();
 

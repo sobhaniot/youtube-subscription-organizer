@@ -2,6 +2,20 @@
 
 (() => {
   const YSO_STORAGE_KEY = "youtubeSubscriptionOrganizer";
+  const LANGUAGE_KEY = "ysoInterfaceLanguage";
+  let uiLanguage = "fa";
+  browser.storage.local.get(LANGUAGE_KEY).then((stored) => {
+    uiLanguage = stored[LANGUAGE_KEY] === "en" ? "en" : "fa";
+    scheduleCategoryButton(true);
+  }).catch(() => {});
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes[LANGUAGE_KEY]) return;
+    uiLanguage = changes[LANGUAGE_KEY].newValue === "en" ? "en" : "fa";
+    scheduleCategoryButton(true);
+    const overlay = document.querySelector(".yso-overlay");
+    if (overlay) void openCategoryDialog();
+  });
+  const uiText = (fa, en) => uiLanguage === "en" ? en : fa;
   let storedDataCache = null;
 
   function normalizeStoredData(source) {
@@ -15,6 +29,9 @@
       recentVideos: safe.recentVideos && typeof safe.recentVideos === "object" ? safe.recentVideos : {},
       youtubeNewChannels: safe.youtubeNewChannels && typeof safe.youtubeNewChannels === "object"
         ? safe.youtubeNewChannels
+        : {},
+      seenYoutubeNewChannels: safe.seenYoutubeNewChannels && typeof safe.seenYoutubeNewChannels === "object"
+        ? safe.seenYoutubeNewChannels
         : {},
       knownVideoIds: Array.isArray(safe.knownVideoIds) ? safe.knownVideoIds : [],
       lastVideoCheck: typeof safe.lastVideoCheck === "string" ? safe.lastVideoCheck : null,
@@ -174,6 +191,147 @@
     return Boolean(explicitBadge);
   }
 
+  function inspectGuideNewMarker(entry) {
+    const selectors = [
+      "#newness-dot",
+      "#guide-entry-badge",
+      "yt-icon.guide-entry-badge",
+      ".guide-entry-badge",
+      "yt-spec-icon-badge-shape",
+      "[class*='newness-dot']",
+      "[class*='new-content-dot']",
+      "[data-is-new='true']",
+      "[aria-label*='new video' i]",
+      "[aria-label*='new content' i]",
+      "[aria-label*='ویدیوی جدید']"
+    ];
+    const found = new Set();
+    for (const selector of selectors) {
+      try {
+        for (const node of entry.querySelectorAll(selector)) found.add(node);
+      } catch {
+        // Ignore selectors unsupported by this browser version.
+      }
+    }
+    const candidates = [...found].map((node) => {
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      const visible = style.display !== "none" && style.visibility !== "hidden" &&
+        Number(style.opacity || 1) > 0;
+      const pseudoDetails = (pseudo) => {
+        const pseudoStyle = getComputedStyle(node, pseudo);
+        return {
+          content: pseudoStyle.content,
+          display: pseudoStyle.display,
+          background: pseudoStyle.backgroundColor,
+          width: pseudoStyle.width,
+          height: pseudoStyle.height
+        };
+      };
+      return {
+        id: node.id || "",
+        tag: node.tagName.toLowerCase(),
+        className: typeof node.className === "string" ? node.className : "",
+        ariaLabel: node.getAttribute("aria-label") || "",
+        display: style.display,
+        visibility: style.visibility,
+        opacity: style.opacity,
+        background: style.backgroundColor,
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        visible,
+        before: pseudoDetails("::before"),
+        after: pseudoDetails("::after")
+      };
+    });
+    return {
+      recognizedByCurrentDetector: guideEntryHasNewVideo(entry),
+      visibleCandidateCount: candidates.filter((item) => item.visible).length,
+      candidates
+    };
+  }
+
+  function findStoredChannelForGuide(data, guideChannel) {
+    const identityMatches = data.channels.filter((channel) => sameChannelIdentity(channel, guideChannel));
+    if (identityMatches.length === 1) return identityMatches[0];
+    if (identityMatches.length > 1) return null;
+    const title = String(guideChannel.title || "").trim().toLocaleLowerCase();
+    if (!title) return null;
+    const titleMatches = data.channels.filter((channel) =>
+      String(channel.title || "").trim().toLocaleLowerCase() === title
+    );
+    return titleMatches.length === 1 ? titleMatches[0] : null;
+  }
+
+  async function createBlueDotDiagnosticReport() {
+    const data = await getStoredData();
+    const entries = [...document.querySelectorAll(
+      "ytd-guide-entry-renderer, ytd-mini-guide-entry-renderer, yt-guide-entry-renderer"
+    )];
+    const rows = entries.map((entry) => {
+      const link = entry.querySelector(
+        'a[href^="/@"], a[href^="/channel/"], a[href^="/c/"], a[href^="/user/"]'
+      );
+      const path = normalizedGuideChannelKey(link?.getAttribute("href"));
+      const title = link?.getAttribute("title")?.trim() ||
+        entry.querySelector("#endpoint, #label, yt-formatted-string")?.textContent?.trim() || "";
+      const guideChannel = {
+        key: path,
+        url: path ? `${location.origin}${path}` : "",
+        title
+      };
+      const marker = inspectGuideNewMarker(entry);
+      const channel = findStoredChannelForGuide(data, guideChannel);
+      const titleKey = String(guideChannel.title || "").trim().toLocaleLowerCase();
+      const markerByIdentity = Object.entries(data.youtubeNewChannels).find(([key, status]) =>
+        sameChannelIdentity({ key, url: `${location.origin}${key.startsWith("/") ? key : `/${key}`}`, title: status?.title || "" }, guideChannel)
+      );
+      const markerByTitle = titleKey
+        ? Object.entries(data.youtubeNewChannels).find(([, status]) =>
+          String(status?.title || "").trim().toLocaleLowerCase() === titleKey
+        )
+        : null;
+      const storedMarker = markerByIdentity || markerByTitle;
+      const seen = matchesSeenGuideChannel(data, data.seenYoutubeNewChannels, guideChannel);
+      const recentVideos = channel ? data.recentVideos[channel.key] || [] : [];
+      return {
+        title,
+        guidePath: path,
+        currentDetectorRecognizes: marker.recognizedByCurrentDetector,
+        visibleMarkerCandidateCount: marker.visibleCandidateCount,
+        storedChannelKey: channel?.key || null,
+        storedMarkerKey: storedMarker?.[0] || null,
+        markedSeen: seen,
+        recentVideos: recentVideos.length,
+        extensionWouldShowDot: Boolean(storedMarker || recentVideos.length),
+        markerCandidates: marker.candidates
+      };
+    });
+    const visibleRows = rows.filter((row) => row.visibleMarkerCandidateCount > 0);
+    const recognizedRows = rows.filter((row) => row.currentDetectorRecognizes);
+    const missingFromExtension = visibleRows.filter((row) => !row.extensionWouldShowDot);
+    return {
+      generatedAt: new Date().toISOString(),
+      page: location.href,
+      guideContainerFound: Boolean(document.querySelector(
+        "ytd-guide-renderer, #guide-content, tp-yt-app-drawer #contentContainer"
+      )),
+      summary: {
+        guideEntries: entries.length,
+        recognizedByCurrentDetector: recognizedRows.length,
+        entriesWithVisibleMarkerCandidates: visibleRows.length,
+        guideChannelsMatchedToSavedList: rows.filter((row) => row.storedChannelKey).length,
+        savedYouTubeMarkers: Object.keys(data.youtubeNewChannels).length,
+        channelsWithRecentVideos: Object.keys(data.recentVideos).length,
+        seenSuppressionRecords: Object.keys(data.seenYoutubeNewChannels).length,
+        visibleMarkersMissingFromExtension: missingFromExtension.length
+      },
+      visibleMarkersMissingFromExtension: missingFromExtension.slice(0, 60),
+      detectorRecognizedExamples: recognizedRows.slice(0, 30),
+      note: "This report is created locally. It is not sent anywhere automatically."
+    };
+  }
+
   function channelIdentityValues(channel) {
     return new Set([
       channel?.key,
@@ -193,6 +351,22 @@
     if (globalThis.YSOChannelData?.sameChannel(left, right)) return true;
     const rightKeys = channelIdentityValues(right);
     return [...channelIdentityValues(left)].some((key) => rightKeys.has(key));
+  }
+
+  function matchesSeenGuideChannel(data, seenChannels, channel) {
+    return Object.entries(seenChannels).some(([key, status]) => {
+      const seenChannel = {
+        key,
+        url: `${location.origin}${key.startsWith("/") ? key : `/${key}`}`,
+        title: status?.title || ""
+      };
+      if (sameChannelIdentity(seenChannel, channel)) return true;
+      const title = String(status?.title || "").trim().toLocaleLowerCase();
+      if (!title || title !== String(channel?.title || "").trim().toLocaleLowerCase()) return false;
+      return data.channels.filter((item) =>
+        String(item.title || "").trim().toLocaleLowerCase() === title
+      ).length === 1;
+    });
   }
 
   let guideSyncRunning = false;
@@ -221,12 +395,19 @@
     try {
       const data = await getStoredData();
       const next = { ...data.youtubeNewChannels };
+      const seen = { ...data.seenYoutubeNewChannels };
       let changed = false;
       const viewedChannel = currentInfo && data.channels.find((channel) =>
         sameChannelIdentity(channel, currentInfo)
       );
 
       if (viewedChannel) {
+        const previousSeen = seen[viewedChannel.key];
+        seen[viewedChannel.key] = {
+          title: viewedChannel.title || previousSeen?.title || "",
+          seenAt: previousSeen?.seenAt || new Date().toISOString()
+        };
+        if (!previousSeen) changed = true;
         for (const key of Object.keys(data.recentVideos)) {
           if (channelIdentityValues(viewedChannel).has(key.toLocaleLowerCase())) {
             delete data.recentVideos[key];
@@ -262,6 +443,8 @@
           continue;
         }
         if (status.hasNew) {
+          // YouTube's current guide marker is authoritative. A stored "seen"
+          // record must not hide a native marker that is still visible.
           const previous = next[key];
           if (!previous || previous.title !== status.title) {
             next[key] = { title: status.title, detectedAt: new Date().toISOString() };
@@ -271,9 +454,23 @@
           delete next[key];
           changed = true;
         }
+        if (!status.hasNew) {
+          for (const [seenKey, seenStatus] of Object.entries(seen)) {
+            const seenChannel = {
+              key: seenKey,
+              url: `${location.origin}${seenKey.startsWith("/") ? seenKey : `/${seenKey}`}`,
+              title: seenStatus?.title || ""
+            };
+            if (matchesSeenGuideChannel(data, { [seenKey]: seenStatus }, observedChannel)) {
+              delete seen[seenKey];
+              changed = true;
+            }
+          }
+        }
       }
       if (!changed) return;
       data.youtubeNewChannels = next;
+      data.seenYoutubeNewChannels = seen;
       await saveStoredData(data);
     } finally {
       guideSyncRunning = false;
@@ -311,7 +508,9 @@
     if (!button || !channel) return;
     const data = await getStoredData();
     const count = data.assignments[storedChannelKey(data, channel)]?.length || 0;
-    const label = count > 0 ? `دسته‌بندی (${count.toLocaleString("fa-IR")})` : "دسته‌بندی";
+    const label = count > 0
+      ? uiText(`دسته‌بندی (${count.toLocaleString("fa-IR")})`, `Organize (${count.toLocaleString("en-US")})`)
+      : uiText("دسته‌بندی", "Organize");
     if (button.textContent !== label) button.textContent = label;
     button.dataset.assigned = String(count > 0);
   }
@@ -338,17 +537,17 @@
     dialog.className = "yso-dialog";
     dialog.setAttribute("role", "dialog");
     dialog.setAttribute("aria-modal", "true");
-    dialog.setAttribute("aria-label", `دسته‌بندی ${channel.title}`);
+    dialog.setAttribute("aria-label", uiText(`دسته‌بندی ${channel.title}`, `Organize ${channel.title}`));
 
     const header = document.createElement("div");
     header.className = "yso-dialog-header";
     const heading = document.createElement("strong");
-    heading.textContent = `دسته‌بندی «${channel.title}»`;
+    heading.textContent = uiText(`دسته‌بندی «${channel.title}»`, `Organize “${channel.title}”`);
     const close = document.createElement("button");
     close.type = "button";
     close.className = "yso-close";
     close.textContent = "×";
-    close.setAttribute("aria-label", "بستن");
+    close.setAttribute("aria-label", uiText("بستن", "Close"));
     close.addEventListener("click", closeCategoryDialog);
     header.append(heading, close);
 
@@ -357,7 +556,10 @@
     if (data.categories.length === 0) {
       const message = document.createElement("p");
       message.className = "yso-empty-message";
-      message.textContent = "هنوز دسته‌ای نساخته‌اید. از فرم پایین اولین دسته را بسازید.";
+      message.textContent = uiText(
+        "هنوز دسته‌ای نساخته‌اید. از فرم پایین اولین دسته را بسازید.",
+        "You have no categories yet. Create your first one below."
+      );
       options.append(message);
     }
 
@@ -391,14 +593,14 @@
     nameInput.type = "text";
     nameInput.maxLength = 32;
     nameInput.required = true;
-    nameInput.placeholder = "دستهٔ جدید";
+    nameInput.placeholder = uiText("دستهٔ جدید", "New category");
     const colorInput = document.createElement("input");
     colorInput.type = "color";
     colorInput.value = "#d9233f";
-    colorInput.setAttribute("aria-label", "رنگ دسته");
+    colorInput.setAttribute("aria-label", uiText("رنگ دسته", "Category color"));
     const addButton = document.createElement("button");
     addButton.type = "submit";
-    addButton.textContent = "افزودن";
+    addButton.textContent = uiText("افزودن", "Add");
     form.append(nameInput, colorInput, addButton);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -441,7 +643,7 @@
       button = document.createElement("button");
       button.type = "button";
       button.className = "yso-category-button";
-      button.textContent = "دسته‌بندی";
+      button.textContent = uiText("دسته‌بندی", "Organize");
       button.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -542,6 +744,12 @@
   }
 
   document.addEventListener("yt-navigate-finish", refreshForNavigation);
+  browser.runtime.onMessage.addListener((message) => {
+    if (message?.type === "diagnose-youtube-blue-dots") {
+      return createBlueDotDiagnosticReport();
+    }
+    return undefined;
+  });
   browser.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local" || !changes[YSO_STORAGE_KEY]) return;
     storedDataCache = normalizeStoredData(changes[YSO_STORAGE_KEY].newValue);

@@ -242,6 +242,28 @@ select:focus-visible {
   padding-top: 24px;
 }
 
+.language-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px;
+  color: #aaa3b2;
+  font-size: 11px;
+}
+
+.language-setting select {
+  min-width: 105px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  padding: 5px 8px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  font: inherit;
+}
+
+.yso-english { font-family: Arial, "Segoe UI", sans-serif; }
+
 .text-button {
   border: 0;
   padding: 7px;

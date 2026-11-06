@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,7 +9,7 @@
   <body>
     <header>
       <div class="heading">
-        <img src="../icons/icon.svg" alt="" width="30" height="30">
+        <img src="../icons/icon-48.png" alt="" width="30" height="30">
         <div>
           <strong>اشتراک‌های من</strong>
           <small id="result-count">۰ کانال</small>
@@ -26,12 +26,29 @@
     <main id="channel-list" aria-live="polite"></main>
 
     <footer>
+      <label class="language-setting" for="interface-language"><span>زبان رابط</span>
+        <select id="interface-language" aria-label="زبان رابط">
+          <option value="fa">فارسی</option>
+          <option value="en" selected>English</option>
+        </select>
+      </label>
       <small id="refresh-status" role="status" aria-live="polite"></small>
+      <button id="diagnose-blue-dots" class="diagnostic-button" type="button">تشخیص نقطه‌های آبی</button>
       <button id="refresh-channels" type="button">رفرش کانال‌ها</button>
       <small id="extension-version" aria-label="نسخهٔ افزونه"></small>
     </footer>
+    <dialog id="diagnostic-dialog" aria-labelledby="diagnostic-title">
+      <h2 id="diagnostic-title">گزارش تشخیصی نقطه‌های آبی</h2>
+      <p>گزارش را بررسی کنید یا کپی کنید و اینجا بفرستید. گزارش فقط در همین پنل ساخته می‌شود.</p>
+      <textarea id="diagnostic-output" rows="16" readonly spellcheck="false"></textarea>
+      <div class="diagnostic-actions">
+        <button id="copy-diagnostic" type="button">کپی گزارش</button>
+        <button id="close-diagnostic" type="button">بستن</button>
+      </div>
+    </dialog>
     <script src="../shared/channel-data.js"></script>
     <script src="../shared/avatar-cache.js"></script>
+    <script src="../shared/ui-language.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

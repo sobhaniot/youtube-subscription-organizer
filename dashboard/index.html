@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,7 +10,7 @@
     <div class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="#top" aria-label="مدیر اشتراک‌های یوتیوب">
-          <img src="../icons/icon.svg" width="44" height="44" alt="">
+          <img src="../icons/icon-48.png" width="44" height="44" alt="">
           <span><strong>اشتراک‌های من</strong><small>مرتب، کامل، در دسترس</small></span>
         </a>
 
@@ -26,6 +26,12 @@
         </form>
 
         <div class="sidebar-footer">
+          <label class="language-setting" for="interface-language"><span>زبان رابط</span>
+            <select id="interface-language" aria-label="زبان رابط">
+              <option value="fa">فارسی</option>
+              <option value="en" selected>English</option>
+            </select>
+          </label>
           <button id="export-data" class="text-button" type="button">خروجی پشتیبان</button>
           <label class="text-button file-button">بازیابی پشتیبان<input id="import-data" type="file" accept="application/json,.json"></label>
         </div>
@@ -83,7 +89,7 @@
         <div id="notice" class="notice" hidden role="status"></div>
 
         <section id="empty-state" class="empty-state">
-          <img src="../icons/icon.svg" width="72" height="72" alt="">
+          <img src="../icons/icon-96.png" width="72" height="72" alt="">
           <h2>فهرست شما آمادهٔ ساخته‌شدن است</h2>
           <p>روی «دریافت از یوتیوب» بزنید. افزونه صفحهٔ اشتراک‌ها را باز می‌کند و تا انتهای فهرست پیش می‌رود.</p>
           <button id="empty-sync-button" class="secondary-button" type="button">شروع دریافت</button>
@@ -95,6 +101,7 @@
 
     <script src="../shared/avatar-cache.js"></script>
     <script src="../shared/channel-data.js"></script>
+    <script src="../shared/ui-language.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

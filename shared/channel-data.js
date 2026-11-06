@@ -160,6 +160,17 @@
       if (target && validKeys.has(target)) markers[target] = marker;
     }
     result.youtubeNewChannels = markers;
+
+    const seenMarkers = {};
+    for (const [key, marker] of Object.entries(source.seenYoutubeNewChannels || {})) {
+      let target = aliases.get(key) || aliases.get(String(key).replace(/\/$/, "").toLocaleLowerCase());
+      if (!target && marker?.title) {
+        const matches = mergedChannels.filter((channel) => cleanTitle(channel) === cleanTitle(marker));
+        if (matches.length === 1) target = matches[0].key;
+      }
+      if (target && validKeys.has(target)) seenMarkers[target] = marker;
+    }
+    result.seenYoutubeNewChannels = seenMarkers;
     return result;
   }
 
